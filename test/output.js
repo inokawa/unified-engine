@@ -184,6 +184,39 @@ test('output', async function (t) {
     assert.equal(output, 'two')
   })
 
+  await t.test('should write binary to a path', async function () {
+    const cwd = new URL('simple-structure/', fixtures)
+    const stderr = spy()
+    const binary = () => new Uint8Array([0xde, 0xad, 0xbe, 0xef])
+    const result = await engine({
+      cwd,
+      extensions: ['txt'],
+      files: ['one.txt'],
+      output: 'five.bin',
+      processor: noop().use(
+        /** @type {Plugin<[], Literal, Uint8Array>} */
+        // @ts-expect-error: TS doesn’t get `this`.
+        function () {
+          /** @type {Compiler<Literal, Uint8Array>} */
+          this.compiler = function () {
+            return binary()
+          }
+        }
+      ),
+      streamError: stderr.stream
+    })
+
+    const input = String(await fs.readFile(new URL('one.txt', cwd)))
+    const output = await fs.readFile(new URL('five.bin', cwd))
+
+    await fs.unlink(new URL('five.bin', cwd))
+
+    assert.equal(result.code, 0)
+    assert.equal(stderr(), 'one.txt > five.bin: written\n')
+    assert.equal(input, '')
+    assert.deepStrictEqual(new Uint8Array(output), binary())
+  })
+
   await t.test('should write to folders and support URLs', async function () {
     const cwd = new URL('simple-structure/', fixtures)
     const stderr = spy()
